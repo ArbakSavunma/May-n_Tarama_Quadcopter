@@ -33,7 +33,6 @@ VectorInt16 aa;         // [x, y, z]            accel sensor measurements
 VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
 VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
 VectorFloat gravity;    // [x, y, z]            gravity vector
-int 
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
@@ -52,6 +51,7 @@ long int throttle=0, prevyaw=0, prevpitch=0, prevroll=0, en1=0, en2=0;
 double roll_pid_i, roll_last_error, roll_control_signal;
 double pitch_pid_i, pitch_last_error, pitch_control_signal;
 double yaw_pid_i, yaw_last_error, yaw_control_signal;
+int motpower1=0, motpower2=0, motpower3=0, motpower4=0; 
 
 void mot_calib_setup() {
   Serial.begin(115200);
@@ -95,7 +95,6 @@ long int get_reciever() {
   }
   return receiver_values[0], receiver_values[1], receiver_values[2], receiver_values[3], receiver_values[4], receiver_values[5];
 }
-
 long int rec_ver_transform(long int rec0, long int rec1, long int rec2, long int rec3, long int rec4, long int rec5) {
 
     long int rec[]= {rec0,rec1,rec2,rec3,rec4,rec5};    
@@ -244,6 +243,15 @@ double getControlSignal(double error, double kp, double ki, double kd, double& p
 
 int calculateMotorPowers(int PrRoll, int PrPitch, int PrYaw, struct IMU_Values imu_values) {
   double rollError = PrRoll - imu_values.CurrentOrientation.RollAngle;
+  String sendData = "GET /update?api_key="+ myAPI +"&"+ myFIELD +"="+String(rollError);
+  Send_AT_Cmd("AT+CIPMUX=1", 1000, DEBUG);       //Allow multiple connections
+  Send_AT_Cmd("AT+CIPSTART=0,\"TCP\",\""+ myHOST +"\","+ myPORT, 1000, DEBUG);
+  Send_AT_Cmd("AT+CIPSEND=0," +String(sendData.length()+4),1000,DEBUG);  
+  esp.find(">"); 
+  esp.println(sendData);
+  Send_AT_Cmd("AT+CIPCLOSE=0",1000,DEBUG);
+  Serial.println("Done!");
+  Serial.println("");
   Serial.print("Rollerror:");
   Serial.print(rollError);
   Serial.print(",");
@@ -288,11 +296,33 @@ int calculateMotorPowers(int PrRoll, int PrPitch, int PrYaw, struct IMU_Values i
   Serial.print("mot4:");
   Serial.print(motpower4);
   Serial.println(" ");
-  return motpower1,motpower2,motpower3,motpower4,rollError;
+  return motpower1,motpower2,motpower3,motpower4;
+}
+String Send_AT_Cmd(String command, const int timeout, boolean debug)
+{
+  Serial.print(command);
+  Serial.println("     ");
+  
+  String response = "";
+  esp.println(command);
+  long int time = millis();
+  while ( (time + timeout) > millis())
+  {
+    while (esp.available())
+    {
+      char c = esp.read();
+      response += c;
+    }
+  }
+  if (debug)
+  {
+    //Serial.print(response);
+  }
+  return response;
 }
 
-void setup() {
-  // put your setup code here, to run once:
+void setup()
+{
   initializeIMU();
   mot_calib_setup();
 }
@@ -305,7 +335,7 @@ void loop() {
     servo2.write(servo_val1);
     servo3.write(servo_val1);
     servo4.write(servo_val1);
-  rec_ver_transform(receiver_values[0],receiver_values[1],receiver_values[2],receiver_values[3],receiver_values[4],receiver_values[5]);
+    rec_ver_transform(receiver_values[0],receiver_values[1],receiver_values[2],receiver_values[3],receiver_values[4],receiver_values[5]);
 //*************************************************************
     if(throttle<20) {
       ESC1.write(0);
@@ -331,7 +361,8 @@ void loop() {
     ESC2.write(motpower2);
     ESC3.write(motpower3);
     ESC4.write(motpower4);
-
   }
-}
+  
+  
 
+}
